@@ -2,72 +2,30 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from pathlib import Path
 import numpy as np
-import argparse
 
 
 class PremiseSelector:
 
-    def __init__(self):
-        pass
-        
+    def __init__(self, path: str):
+        self.path = path
+        self.pairs = []
+        self.conjecture_text = []
+        self.axioms_texts = []
 
-
-    def select_premises_tfidf(conjecture_text: str,
-                            axioms_texts: list[str],
-                            k: int) -> list[str]:
-        """
-        Return up to k axioms (as strings) most relevant to the conjecture.
-        Implementation: uses your existing tokenisation + tf-idf + cosine similarity.
-        """
-
-        parser = argparse.ArgumentParser(
-            description = "Calculate the cosine similarity between conjecture and axioms."
-            )
-
-        parser.add_argument(
-            "-p", 
-            "--path", 
-            metavar="path",
-            required=True,
-            help="The TPTP file path."
-            )
-
-        filepath = parser.parse_args().path
-        
-        pairs = doc_parse(filepath)
-
-        docs = [a[2] for a in pairs if a[1] == "axiom"]
-
-        query_str = ""
-        for c in pairs:
-            if c[1] == "conjecture":
-                query_str += c[2]
-
-        query = [query_str]
-
-        order, scores = tfidf(docs, query)
-
-        # zip the axiom names with corresponding scores
-        axiom_ids = [a[0] for a in pairs if a[1] == "axiom"]
-
-        print("Axioms/Scores:")
-
-        for i in order:
-            print(f"{axiom_ids[i]}: {scores[i]}")
-
-
-        raise NotImplementedError  # TODO: plug in your current code
 
     # Parse the tptp file
-    def doc_parse(path):
+    def doc_parse(self):
+        self.pairs = []
+        self.conjecture_text = []
+        self.axioms_texts = []
+
         try:
-            p = Path(path)
+            p = Path(self.path)
             text = p.read_text(encoding="utf-8")
             lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         except FileNotFoundError:
             raise Exception("The specified file path does not exist.")
 
-        
         pairs = []
         balance = 0
         current_statement = ""
@@ -92,23 +50,33 @@ class PremiseSelector:
                 current_statement = ""
                 name, role, rest = [x.strip() for x in inside.split(",", 2)]
                 pairs.append((name, role, rest))
+                if role == "axiom": self.axioms_texts.append((name, role, rest))
+                if role == "conjecture": self.conjecture_text.append((name, role, rest))
+
+        self.pairs = pairs
 
         return pairs
 
 
-    # tfidf vectorizer and consine similarity calculation
-    def tfidf(docs, query):
+    # tfidf vectorizer and cosine similarity calculation
+    def tfidf(self):
         vec = TfidfVectorizer(
             lowercase=True,
-            stop_words="english",
+            token_pattern=r"(?u)\b\w+\b",
+            stop_words=None,
             ngram_range=(1, 1)
         )
 
+        if len(self.axioms_texts) == 0 or len(self.conjecture_text) == 0:
+            self.doc_parse()
+
         # fit on the axioms
-        A = vec.fit_transform(docs)
-        print(vec.vocabulary_)
+        axioms = [a[2] for a in self.axioms_texts]
+        A = vec.fit_transform(axioms)
+
         # query on the conjecture
-        q = vec.transform(query)
+        conjecture = [c[2] for c in self.conjecture_text]
+        q = vec.transform(conjecture)
 
         # Calculate the cosine similarity between the conjecture and axioms.
         scores = cosine_similarity(q, A).ravel()
@@ -116,3 +84,32 @@ class PremiseSelector:
         order = np.argsort(scores)[::-1]
 
         return order, scores
+
+
+    def select_premises_tfidf(self, k: int) -> list[str]:
+        """
+        Return up to k axioms (as strings) most relevant to the conjecture.
+        Implementation: using existing tokenization + tf-idf + cosine similarity.
+        """
+        if len(self.conjecture_text) == 0 or len(self.axioms_texts) == 0:
+            self.doc_parse()
+
+        if k > len(self.axioms_texts):  # In case the k is set too large, we restrict it within the range.
+            k = len(self.axioms_texts)
+
+        k_premises = []
+        order, scores = self.tfidf()
+
+        print("Axioms/Scores:")
+        while k > 0:
+            for i in order:
+                print(f"{self.axioms_texts[i][0]}: {scores[i]}")
+                k_premises.append(self.axioms_texts[i][2])
+                k -= 1
+
+        return k_premises
+
+if __name__ == "__main__":
+    premise_selector = PremiseSelector("./sample.p")
+    premises = premise_selector.select_premises_tfidf(k=2)
+    print(premises)
