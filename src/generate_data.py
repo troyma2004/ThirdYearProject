@@ -8,9 +8,10 @@ from src.eprover_parser import parse_eprover_stdout
 # Configuration Constants
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(SCRIPT_DIR)
-PROBLEMS_DIR = os.path.join(ROOT_DIR, "data", "problems")
+TPTP_DIR = os.path.join(ROOT_DIR, "data", "TPTP-v9.2.1")
+PROBLEMS_DIR = os.path.join(TPTP_DIR, "Problems")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "data", "results")
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "dataset.json")
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "dataset.jsonl")
 EPROVER_BIN = os.path.join(ROOT_DIR, "E-Prover", "E", "PROVER", "eprover")
 
 # Time constraint for eprover
@@ -31,6 +32,11 @@ def process_problem(filepath: str) -> Dict[str, Any]:
     :rtype: Dict[str, Any]
     '''
     filename = os.path.basename(filepath)
+
+    # Setting TPTP field in environment in case some tptp files contain "include()".
+    my_env = os.environ.copy()
+    my_env["TPTP"] = TPTP_DIR
+
     command = [
         EPROVER_BIN,
         "--auto",
@@ -45,7 +51,8 @@ def process_problem(filepath: str) -> Dict[str, Any]:
             command, 
             capture_output=True, 
             text=True,
-            timeout=TIMEOUT_SECONDS + 2
+            timeout=TIMEOUT_SECONDS + 2,
+            env=my_env
             )
         
         # Parse the output
@@ -56,8 +63,6 @@ def process_problem(filepath: str) -> Dict[str, Any]:
         return parsed_output
     
     except subprocess.TimeoutExpired as e:
-        print("-> Subprocess timed out.")
-
         return {
             "filename": filename,
             "status": "Timeout",
@@ -66,7 +71,6 @@ def process_problem(filepath: str) -> Dict[str, Any]:
         }
     except Exception as e:
         print(f"-> Error: {e}")
-
         return {
             "filename": filename,
             "status": "Error",
@@ -78,8 +82,9 @@ def process_problem(filepath: str) -> Dict[str, Any]:
 
 # Main loop for data generation.
 if __name__ == "__main__":
-    search_pattern = os.path.join(PROBLEMS_DIR, "*.p")
-    files = glob.glob(search_pattern)
+    # Recursively search through every Problems subdirectories.
+    search_pattern = os.path.join(PROBLEMS_DIR, "**", "*.p")
+    files = glob.glob(search_pattern, recursive=True)
 
     # Safety check
     if not files:
@@ -93,7 +98,7 @@ if __name__ == "__main__":
     with open(OUTPUT_FILE, "w+") as f:
         for idx, file in enumerate(files, start=1):
             filename = os.path.basename(file)
-            print(f"[{idx}/{len(files)}] {filename}", end="", flush=True)
+            print(f"[{idx}/{len(files)}] {filename}", end=" ", flush=True)
 
             # Process the problem file with our worker function above.
             result = process_problem(file)
