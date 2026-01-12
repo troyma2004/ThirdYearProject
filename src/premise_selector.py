@@ -1,16 +1,18 @@
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from pathlib import Path
 import numpy as np
 
+from pathlib import Path
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from typing import List, Tuple
 
 class PremiseSelector:
-
     def __init__(self, path: str):
         self.path = path
         self.pairs = []
-        self.conjecture_text = []
-        self.axioms_texts = []
+        self.conjecture_text: List[Tuple[str, str, str]] = []
+        self.axioms_texts: List[Tuple[str, str, str]] = []
+        self.scores = []
+        self.order = []
 
 
     # Parse the tptp file
@@ -55,7 +57,6 @@ class PremiseSelector:
 
         self.pairs = pairs
 
-        return pairs
 
 
     # tfidf vectorizer and cosine similarity calculation
@@ -79,11 +80,8 @@ class PremiseSelector:
         q = vec.transform(conjecture)
 
         # Calculate the cosine similarity between the conjecture and axioms.
-        scores = cosine_similarity(q, A).ravel()
-
-        order = np.argsort(scores)[::-1]
-
-        return order, scores
+        self.scores = cosine_similarity(q, A).ravel()
+        self.order = np.argsort(self.scores)[::-1]
 
 
     def select_premises_tfidf(self, k: int) -> list[str]:
@@ -94,22 +92,25 @@ class PremiseSelector:
         if len(self.conjecture_text) == 0 or len(self.axioms_texts) == 0:
             self.doc_parse()
 
+        if len(self.scores) == 0 or len(self.order) == 0:
+            self.tfidf()
+
         if k > len(self.axioms_texts):  # In case the k is set too large, we restrict it within the range.
             k = len(self.axioms_texts)
 
         k_premises = []
-        order, scores = self.tfidf()
 
         print("Axioms/Scores:")
-        while k > 0:
-            for i in order:
-                print(f"{self.axioms_texts[i][0]}: {scores[i]}")
-                k_premises.append(self.axioms_texts[i][2])
-                k -= 1
+
+        top_k_indices = self.order[:k]
+        for idx in top_k_indices:
+            print(f"{self.axioms_texts[idx][0]}: {self.scores[idx]}")
+            k_premises.append(self.axioms_texts[idx][2])
+            k -= 1
 
         return k_premises
 
 if __name__ == "__main__":
-    premise_selector = PremiseSelector("./sample.p")
-    premises = premise_selector.select_premises_tfidf(k=2)
+    premise_selector = PremiseSelector("./PUZ001+1.p")
+    premises = premise_selector.select_premises_tfidf(k=5)
     print(premises)

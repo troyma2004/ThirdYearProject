@@ -87,8 +87,9 @@ def run_iprover_on_tptp(tptp_str: str,
     try:
         return run_iprover_on_file(tmp_path, timeout)
     finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        # if os.path.exists(tmp_path):
+        #     os.remove(tmp_path)
+        pass
 
 
 if __name__ == "__main__":
