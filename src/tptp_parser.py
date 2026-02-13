@@ -58,16 +58,16 @@ def parse_tptp_file(filepath: str, root_tptp_dir: str, loaded_files: Set[str] = 
     for match in TPTP_PATTERN.finditer(tptp_content):
         name = match.group(2)
         role = match.group(3)
-        text = match.group(4)
+        raw_text = match.group(4)
+        
+        text = " ".join(raw_text.split())
         all_formulas[name] = {"role": role, "text": text}
 
     return all_formulas
 
-# ... (Your existing code functions above) ...
 
 if __name__ == "__main__":
     # --- CONFIGURATION FOR TEST ---
-    # Update this path to where your TPTP folder is!
     MAC_TPTP_PATH = "/Users/xiaoma/ThirdYearProject/data/TPTP-v9.2.1"
     
     # Let's pick a file we KNOW has includes (like the one you showed me earlier)
