@@ -15,7 +15,7 @@ class IProverResult(TypedDict):
     stderr: str
 
 
-def run_iprover_on_file(path: str, timeout: float | None = None) -> IProverResult:
+def run_iprover_on_file(path: str, timeout: float = 5.0) -> IProverResult:
     """
     Run iproveropt on the given TPTP file and return parsed result.
     """
@@ -100,6 +100,8 @@ if __name__ == "__main__":
     )
 
     print(f"Status: {result['status']}")
+    print("-" * 20)
+    print(f"Runtime: {result['runtime']}")
     print("-" * 20)
     print("STDOUT (What iProver said):")
     print(result['stdout'])
