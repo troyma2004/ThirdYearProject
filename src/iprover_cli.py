@@ -27,7 +27,6 @@ def run_iprover_on_file(path: str, timeout: float = 5.0) -> IProverResult:
         "--time_out_real", f"{timeout}",
         "--tptp_safe_out", "true",
         "--schedule", "default",
-        "--fof", "true",
         f"{path}"
     ]
 
@@ -75,7 +74,7 @@ def run_iprover_on_file(path: str, timeout: float = 5.0) -> IProverResult:
 
 
 def run_iprover_on_tptp(tptp_str: str,
-                        timeout: float | None = None) -> IProverResult:
+                        timeout: float = 5.0) -> IProverResult:
     """
     Write tptp_str to a temp file, call run_iprover_on_file, then clean up.
     """

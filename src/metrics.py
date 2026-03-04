@@ -15,7 +15,7 @@ def recall_at_k(ranked_axioms: List[str], pos_set: Set[str], k: int) -> float:
 
     return recall
 
-def success_in_topk(ranked_axioms: List[str], pos_set: Set[str], k: int) -> float:
+def success_in_top_k(ranked_axioms: List[str], pos_set: Set[str], k: int) -> float:
     if not pos_set: return 0.0
     if len(pos_set) > k: return 0.0
     ranked_axioms = _dedupe_preserve_order(ranked_axioms)
@@ -38,6 +38,9 @@ def mrr(ranked_axioms: List[str], pos_set: Set[str]) -> float:
     return mrr_score
 
 def prove_rate(results: List[IProverResult]) -> float:
+    """
+    Given a list of IProverResult TypedDict, return the prove-rate
+    """
     if not results: return 0.0
     successes = sum(1 for result in results if result["status"] == "proved")
     return successes / len(results)
