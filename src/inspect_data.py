@@ -4,7 +4,7 @@ import os
 
 # Configuration
 # Point this to where your dataset.jsonl is
-DATA_FILE = "data/results/dataset.jsonl"
+DATA_FILE = "data/results/ollama.jsonl"
 
 def main():
     if not os.path.exists(DATA_FILE):
@@ -24,14 +24,14 @@ def main():
             total += 1
             data = json.loads(line)
             
-            if data.get("proof_found"):
+            if data.get("recall@10"):
                 solved += 1
                 # Save just the filename and axioms for inspection
                 solved_examples.append({
-                    "file": data.get("filename"),
-                    # USE 'positive_axioms' matching your parser output
-                    "axiom_count": len(data.get("positive_axioms", [])),
-                    "axioms": data.get("positive_axioms", [])
+                    "problem_id": data.get("problem_id"),
+                    "recall@10": data.get("recall@10"),
+                    "recall@30": data.get("recall@30"),
+                    "mrr": data.get("mrr")
                 })
             else:
                 failed += 1
