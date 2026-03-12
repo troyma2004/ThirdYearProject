@@ -1,20 +1,31 @@
-from typing import List
-import requests
 import json
+import math
+import requests
+from typing import List, Dict
+from urllib3.util.retry import Retry
 
 # Configurations
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "t1c/deepseek-math-7b-rl:Q6"
 
+
 class DeepSeekScorer:
     def __init__(self, model_name: str = MODEL_NAME):
         self.model = model_name
         self.session = requests.Session()
+        # Define the explicit retry strategy
+        retry_strategy = Retry(
+            total=3,  # Maximum number of retries
+            backoff_factor=1,  # Wait 1s, 2s, 4s between retries
+            allowed_methods=["POST"],  # Explicitly tell it to retry POST requests
+            status_forcelist=[429, 500, 502, 503, 504]  # Retry on these specific HTTP error codes
+        )
         # Retry logic for stability
-        adapter = requests.adapters.HTTPAdapter(max_retries=3)
+        adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
         self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
 
-        self.prompt_template = self.prompt_template = """You are a premise-selection reranker for automated theorem proving (TPTP-style formulas).
+        self.prompt_template = """You are a premise-selection reranker for automated theorem proving (TPTP-style formulas).
 Given a Goal (conjecture) and a Candidate Axiom, output a relevance score in [0,1].
 
 Scoring rubric:
@@ -78,24 +89,42 @@ Candidate Axiom: {ax}
 
             data = response.json()
             content = json.loads(data["message"]["content"])
+            score_val = float(content["score"])
 
-            # Optional: Print reasoning for debugging
-            # print(f"   Reasoning: {content.get('reasoning', '')[:60]}...")
+            # Validate the score returned is a finite and bounded number.
+            if not math.isfinite(score_val) or not (0.0 <= score_val <= 1.0):
+                raise ValueError(f"LLM returned an out-of-bounds or invalid score: {score_val}")
 
-            return float(content["score"])
+            return score_val
 
-        except Exception as e:
-            print(f"\n[Error] Scoring failed: {e}")
-            return 0.0
+        except requests.exceptions.RequestException as e:
+            print(f"\n[Error] Network/API failure with Ollama: {e}")
+            raise # Stops the program.
 
-    def rerank(self, conj:str, candidates:List[str]) -> List[str]:
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            print(f"\n[Error] Invalid response format from LLM: {e}")
+            raise
+
+
+    def rerank(self, conj: Dict[str, str], candidates:List[Dict[str, str]]) -> List[str]:
+        """
+        Take a conjecture and a list of candidate axioms, return the ranked axioms' names in a list.
+        """
+        # Validate the conjecture dictionary
+        if "formula" not in conj:
+            raise ValueError(f"Conjecture is missing the require 'formula' key. Got {conj}")
+        # Validate every candidate before scoring.
+        for i, ax in enumerate(candidates):
+            if "formula" not in ax or "name" not in ax:
+                raise ValueError(f"Candidate Axiom at index {i} is missing 'name' or 'formula' key. Got {ax}")
+
         # Score every candidate
         scored_candidates = []
         for ax in candidates:
-            score = self.score(conj, ax)
-            scored_candidates.append((ax, score))
+            score = self.score(conj["formula"], ax["formula"])
+            scored_candidates.append((ax["name"], score))
 
         # Rank by Score (Descending)
         scored_candidates.sort(key=lambda x: x[1], reverse=True)
-        ranked_axioms = [ax for ax, s in scored_candidates]
-        return ranked_axioms
+
+        return [ax_name for ax_name, _ in scored_candidates]
