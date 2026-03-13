@@ -118,10 +118,13 @@ Candidate Axiom: {ax}
             if "formula" not in ax or "name" not in ax:
                 raise ValueError(f"Candidate Axiom at index {i} is missing 'name' or 'formula' key. Got {ax}")
 
+        conj_formula = " ".join(conj["formula"].strip().split())
+
         # Score every candidate
         scored_candidates = []
         for ax in candidates:
-            score = self.score(conj["formula"], ax["formula"])
+            ax_formula = " ".join(ax["formula"].strip().split())
+            score = self.score(conj_formula, ax_formula)
             scored_candidates.append((ax["name"], score))
 
         # Rank by Score (Descending)

@@ -8,11 +8,21 @@ from typing import Literal, TypedDict
 IPROVER_BIN = "iprover/iproveropt"
 
 class IProverResult(TypedDict):
-    status: Literal["proved", "failed", "unknown"]
+    status: Literal["proved", "failed", "timeout", "unknown"]
     raw_szs: str | None
     runtime: float | None
     stdout: str
     stderr: str
+
+
+def _unknown_result(stderr: str, stdout: str = "", runtime: float | None = None) -> IProverResult:
+    return IProverResult(
+        status="unknown",
+        raw_szs=None,
+        runtime=runtime,
+        stdout=stdout,
+        stderr=stderr,
+    )
 
 
 def run_iprover_on_file(path: str, timeout: float = 5.0) -> IProverResult:
@@ -20,7 +30,7 @@ def run_iprover_on_file(path: str, timeout: float = 5.0) -> IProverResult:
     Run iproveropt on the given TPTP file and return parsed result.
     """
     if not os.path.exists(IPROVER_BIN):
-        raise FileNotFoundError(f"iproveropt binary not found at {IPROVER_BIN}")
+        return _unknown_result(f"iproveropt binary not found at {IPROVER_BIN}")
 
     command = [
         IPROVER_BIN,
@@ -49,7 +59,7 @@ def run_iprover_on_file(path: str, timeout: float = 5.0) -> IProverResult:
         else:
             raw_szs = None
 
-        status: Literal["proved", "failed", "unknown"] = "unknown"
+        status: Literal["proved", "failed", "timeout", "unknown"] = "unknown"
         if raw_szs in ["Theorem", "Unsatisfiable"]:
             status = "proved"
         elif raw_szs in ["CounterSatisfiable", "Satisfiable"]:
@@ -65,12 +75,15 @@ def run_iprover_on_file(path: str, timeout: float = 5.0) -> IProverResult:
 
     except subprocess.TimeoutExpired as e:
         return IProverResult(
-            status = "unknown",
+            status = "timeout",
             raw_szs = None,
             runtime = timeout,
             stdout = e.stdout if e.stdout else "",
             stderr = e.stderr if e.stderr else ""
         )
+
+    except (OSError, subprocess.SubprocessError) as e:
+        return _unknown_result(f"Failed to execute iProver: {type(e).__name__}: {e}")
 
 
 def run_iprover_on_tptp(tptp_str: str,
@@ -78,10 +91,13 @@ def run_iprover_on_tptp(tptp_str: str,
     """
     Write tptp_str to a temp file, call run_iprover_on_file, then clean up.
     """
-    with tempfile.NamedTemporaryFile(mode="w+", dir="./tmp/", suffix=".p", delete=False) as tmp:
-        to_write = tptp_str if tptp_str.endswith("\n") else tptp_str + "\n"
-        tmp.write(to_write)
-        tmp_path = tmp.name
+    try:
+        with tempfile.NamedTemporaryFile(mode="w+", dir="./tmp/", suffix=".p", delete=False) as tmp:
+            to_write = tptp_str if tptp_str.endswith("\n") else tptp_str + "\n"
+            tmp.write(to_write)
+            tmp_path = tmp.name
+    except OSError as e:
+        return _unknown_result(f"Failed to create temporary TPTP file: {type(e).__name__}: {e}")
 
     try:
         return run_iprover_on_file(tmp_path, timeout)
